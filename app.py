@@ -219,10 +219,8 @@ def add_arch_reference_lines(fig, R_value, h_value, theta_values):
 # positive e goes towards intrados => smaller radius
 # negative e goes towards extrados => larger radius
 
-e_visual_geom = e.copy()
-e_visual_geom[np.abs(e_visual_geom) > h / 2] = np.nan
-
-r_pressure_visual = R - e_visual_geom
+# Show the full line of thrust, even if it is outside the arch thickness
+r_pressure_visual = R - e
 x_pressure_visual, y_pressure_visual = arc_xy(r_pressure_visual, theta)
 
 
@@ -498,14 +496,17 @@ fig_geom.add_annotation(
 )
 
 # Fixed axis limits so the arch stays readable
+max_pressure_radius = np.nanmax(np.abs(r_pressure_visual))
+geom_limit = max(R_extrados, max_pressure_radius) + 0.55 * R
+
 fig_geom.update_xaxes(
-    range=[-R - 0.55 * R, R + 0.55 * R],
+    range=[-geom_limit, geom_limit],
     title="x [m]",
     zeroline=False
 )
 
 fig_geom.update_yaxes(
-    range=[-0.32 * R, R_extrados + 0.45 * R],
+    range=[-0.32 * geom_limit, geom_limit],
     title="y [m]",
     scaleanchor="x",
     scaleratio=1,
@@ -521,12 +522,12 @@ fig_geom.update_layout(
 
 st.plotly_chart(fig_geom, use_container_width=True)
 
-if show_pressure_line and np.any(np.abs(e) > h / 2):
-    st.warning(
-        "Част от реалната линия на натиска е извън дебелината на арката. "
-        "В геометричната схема са показани само точките, които попадат в дебелината, "
-        "за да не се деформира мащабът на чертежа."
-    )
+#if show_pressure_line and np.any(np.abs(e) > h / 2):
+#    st.warning(
+#        "Част от реалната линия на натиска е извън дебелината на арката. "
+#        "В геометричната схема са показани само точките, които попадат в дебелината, "
+#        "за да не се деформира мащабът на чертежа."
+#    )
 
 
 # ============================================================
@@ -659,11 +660,11 @@ st.header("Полярна полудиаграма на ексцентрицит
 # For visualisation only, hide points outside the arch thickness.
 # The engineering check still uses the full e values.
 
-e_visual = e.copy()
-e_visual[np.abs(e_visual) > h / 2] = np.nan
+#e_visual = e.copy()
+#e_visual[np.abs(e_visual) > h / 2] = np.nan
 
-r_e = R - e_visual
-
+#r_e = R - e_visual
+r_e = R - e
 r_h6_plus = np.full_like(theta, R - h / 6)    # +h/6 towards intrados
 r_h6_minus = np.full_like(theta, R + h / 6)   # -h/6 towards extrados
 
@@ -735,24 +736,26 @@ fig_e_polar.update_layout(
     yaxis_scaleanchor="x",
     legend=dict(orientation="h", y=-0.22)
 )
+max_r_e = np.nanmax(np.abs(r_e))
+plot_limit = max(R_extrados, max_r_e) + 0.25 * R
 
 fig_e_polar.update_xaxes(
-    range=[-R_extrados - 0.25 * R, R_extrados + 0.25 * R],
+    range=[-plot_limit, plot_limit],
     zeroline=False
 )
 
 fig_e_polar.update_yaxes(
-    range=[-0.20 * R, R_extrados + 0.35 * R],
+    range=[-0.20 * plot_limit, plot_limit],
     zeroline=False
 )
 
 st.plotly_chart(fig_e_polar, use_container_width=True)
 
-if np.any(np.abs(e) > h / 2):
-    st.warning(
-        "Част от стойностите на e(θ) са извън дебелината на арката. "
-        "В диаграмата са скрити точките извън сечението, за да остане чертежът четим."
-    )
+#if np.any(np.abs(e) > h / 2):
+#    st.warning(
+#        "Част от стойностите на e(θ) са извън дебелината на арката. "
+#        "В диаграмата са скрити точките извън сечението, за да остане чертежът четим."
+#    )
 
 
 # ============================================================
