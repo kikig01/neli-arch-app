@@ -36,7 +36,7 @@ st.sidebar.write(f"Отвор L = 2R = {L:.2f} m")
 h = st.sidebar.number_input(
     "Дебелина h [m]",
     min_value=0.01,
-    value=0.80,
+    value=4.00,
     step=0.05
 )
 
@@ -303,12 +303,13 @@ if show_pressure_line:
         name="Линия на натиска в сечението"
     ))
 
-# Span arrow
+# Span arrow: from one end of the intrados to the other end of the intrados
 span_y = -0.16 * R
+
 fig_geom.add_annotation(
-    x=-R,
+    x=-R_intrados,
     y=span_y,
-    ax=R,
+    ax=R_intrados,
     ay=span_y,
     xref="x",
     yref="y",
@@ -321,9 +322,9 @@ fig_geom.add_annotation(
 )
 
 fig_geom.add_annotation(
-    x=R,
+    x=R_intrados,
     y=span_y,
-    ax=-R,
+    ax=-R_intrados,
     ay=span_y,
     xref="x",
     yref="y",
@@ -343,10 +344,10 @@ fig_geom.add_annotation(
     font=dict(size=16)
 )
 
-# Rise arrow
+# Rise arrow: from (0,0) to the intrados crown
 fig_geom.add_annotation(
     x=0,
-    y=R,
+    y=R_intrados,
     ax=0,
     ay=0,
     xref="x",
@@ -363,7 +364,7 @@ fig_geom.add_annotation(
     x=0,
     y=0,
     ax=0,
-    ay=R,
+    ay=R_intrados,
     xref="x",
     yref="y",
     axref="x",
@@ -376,7 +377,7 @@ fig_geom.add_annotation(
 
 fig_geom.add_annotation(
     x=0.08 * R,
-    y=0.5 * R,
+    y=0.5 * R_intrados,
     text="СТРЕЛА",
     showarrow=False,
     font=dict(size=16)
@@ -479,111 +480,300 @@ if show_pressure_line and np.any(np.abs(e) > h / 2):
         "за да не се деформира мащабът на чертежа. Пълните стойности са в таблицата."
     )
 
+# ============================================================
+# Helper function for semicircle polar-style diagrams
+# ============================================================
+
+def semicircle_trace(theta, r, name, hover_values=None):
+    """
+    Draws a polar-style semicircle in Cartesian coordinates.
+    theta is in radians, r is the radial value.
+    """
+    x = r * np.cos(theta)
+    y = r * np.sin(theta)
+
+    if hover_values is None:
+        hover_values = r
+
+    return go.Scatter(
+        x=x,
+        y=y,
+        mode="lines+markers",
+        name=name,
+        text=[
+            f"θ = {td:.1f}°<br>value = {val:.4f}"
+            for td, val in zip(theta_deg, hover_values)
+        ],
+        hovertemplate="%{text}<extra></extra>"
+    )
 
 # ============================================================
-# Moment diagram
+# Helper functions for engineering-style polar semicircle diagrams
 # ============================================================
 
-st.header("Диаграма на огъващия момент M(θ)")
+def arc_xy(radius_values, theta):
+    """
+    Converts polar semicircle coordinates to Cartesian coordinates.
+    theta = 0° left support, 90° crown, 180° right support.
+    """
+    x = -radius_values * np.cos(theta)
+    y = radius_values * np.sin(theta)
+    return x, y
 
-fig_M = go.Figure()
 
-fig_M.add_trace(go.Scatter(
-    x=theta_deg,
-    y=M,
+def add_arch_reference_lines(fig, R, h, theta):
+    """
+    Adds intrados, extrados, and zero/axis line as background references.
+    """
+    r_axis = np.full_like(theta, R)
+    r_intrados = np.full_like(theta, R - h / 2)
+    r_extrados = np.full_like(theta, R + h / 2)
+
+    x_axis_ref, y_axis_ref = arc_xy(r_axis, theta)
+    x_intrados_ref, y_intrados_ref = arc_xy(r_intrados, theta)
+    x_extrados_ref, y_extrados_ref = arc_xy(r_extrados, theta)
+
+    fig.add_trace(go.Scatter(
+        x=x_extrados_ref,
+        y=y_extrados_ref,
+        mode="lines",
+        name="Екстрадос",
+        line=dict(color="gray", width=2, dash="dot")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x_intrados_ref,
+        y=y_intrados_ref,
+        mode="lines",
+        name="Интрадос",
+        line=dict(color="gray", width=2, dash="dot")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x_axis_ref,
+        y=y_axis_ref,
+        mode="lines",
+        name="Нулева линия / ос на арката",
+        line=dict(color="red", width=2)
+    ))
+
+
+# ============================================================
+# Helper for separate scaled polar diagrams
+# ============================================================
+
+def scaled_polar_semicircle(theta, values, theta_deg, name, unit, line_color):
+    """
+    Creates a separate engineering-style semicircular polar diagram.
+    The radius is scaled from the absolute value.
+    The real signed value is kept in hover text.
+    """
+
+    values_abs = np.abs(values)
+    max_value = np.nanmax(values_abs)
+
+    if max_value > 0:
+        r = values_abs / max_value
+    else:
+        r = np.zeros_like(values_abs)
+
+    # Semicircle coordinates:
+    # theta = 0° left, theta = 90° top, theta = 180° right
+    x = -r * np.cos(theta)
+    y = r * np.sin(theta)
+
+    fig = go.Figure()
+
+    # Reference semicircles: 25%, 50%, 75%, 100%
+    for rr, label in zip([0.25, 0.50, 0.75, 1.00], ["25%", "50%", "75%", "100%"]):
+        x_ref = -rr * np.cos(theta)
+        y_ref = rr * np.sin(theta)
+
+        fig.add_trace(go.Scatter(
+            x=x_ref,
+            y=y_ref,
+            mode="lines",
+            name=label,
+            line=dict(color="lightgray", width=1, dash="dot"),
+            hoverinfo="skip"
+        ))
+
+    # Actual scaled diagram
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode="lines+markers",
+        name=name,
+        line=dict(color=line_color, width=3),
+        marker=dict(size=6),
+        text=[
+            f"θ = {td:.1f}°<br>{name} = {v:.4f} {unit}<br>|{name}| / max = {rv:.3f}"
+            for td, v, rv in zip(theta_deg, values, r)
+        ],
+        hovertemplate="%{text}<extra></extra>"
+    ))
+
+    fig.update_layout(
+        title=f"{name} като отделна мащабирана полярна полудиаграма",
+        xaxis_title="мащабиран x",
+        yaxis_title="мащабиран y",
+        height=600,
+        yaxis_scaleanchor="x",
+        legend=dict(orientation="h", y=-0.15)
+    )
+
+    fig.update_xaxes(
+        range=[-1.15, 1.15],
+        zeroline=True
+    )
+
+    fig.update_yaxes(
+        range=[-0.10, 1.15],
+        zeroline=True
+    )
+
+    return fig
+
+# ============================================================
+# N(theta) separate scaled polar diagram
+# ============================================================
+
+st.header("Полярна полудиаграма на нормалната сила N(θ)")
+
+fig_N_scaled = scaled_polar_semicircle(
+    theta=theta,
+    values=N,
+    theta_deg=theta_deg,
+    name="N(θ)",
+    unit="kN",
+    line_color="blue"
+)
+
+st.plotly_chart(fig_N_scaled, use_container_width=True)
+
+# ============================================================
+# M(theta) separate scaled polar diagram
+# ============================================================
+
+st.header("Полярна полудиаграма на огъващия момент M(θ)")
+
+fig_M_scaled = scaled_polar_semicircle(
+    theta=theta,
+    values=M,
+    theta_deg=theta_deg,
+    name="M(θ)",
+    unit="kNm",
+    line_color="purple"
+)
+
+st.plotly_chart(fig_M_scaled, use_container_width=True)
+
+# ============================================================
+# Eccentricity polar semicircle diagram
+# ============================================================
+
+st.header("Полярна полудиаграма на ексцентрицитета e(θ)")
+
+# Positive e goes towards intrados => smaller radius.
+# Negative e goes towards extrados => larger radius.
+
+# For visualisation only:
+# hide points that are far outside the section, so the plot stays readable.
+e_visual = e.copy()
+e_visual[np.abs(e_visual) > h / 2] = np.nan
+
+r_e = R - e_visual
+
+r_h6_plus = np.full_like(theta, R - h / 6)   # +h/6 towards intrados
+r_h6_minus = np.full_like(theta, R + h / 6)  # -h/6 towards extrados
+
+r_h3_plus = np.full_like(theta, R - h / 3)   # +h/3 towards intrados
+r_h3_minus = np.full_like(theta, R + h / 3)  # -h/3 towards extrados
+
+x_e, y_e = arc_xy(r_e, theta)
+
+x_h6_plus, y_h6_plus = arc_xy(r_h6_plus, theta)
+x_h6_minus, y_h6_minus = arc_xy(r_h6_minus, theta)
+
+x_h3_plus, y_h3_plus = arc_xy(r_h3_plus, theta)
+x_h3_minus, y_h3_minus = arc_xy(r_h3_minus, theta)
+
+fig_e_polar = go.Figure()
+
+add_arch_reference_lines(fig_e_polar, R, h, theta)
+
+fig_e_polar.add_trace(go.Scatter(
+    x=x_e,
+    y=y_e,
     mode="lines+markers",
-    name="M(θ) [kNm]"
+    name="e(θ)",
+    line=dict(color="black", width=3),
+    marker=dict(size=6),
+    text=[
+        f"θ = {td:.1f}°<br>e = {ev:.4f} m"
+        for td, ev in zip(theta_deg, e)
+    ],
+    hovertemplate="%{text}<extra></extra>"
 ))
 
-fig_M.add_hline(
-    y=0,
-    line_dash="dash"
-)
-
-fig_M.update_layout(
-    title="Огъващ момент M(θ)",
-    xaxis_title="θ [градуси]",
-    yaxis_title="M(θ) [kNm]",
-    height=450
-)
-
-st.plotly_chart(fig_M, use_container_width=True)
-
-
-# ============================================================
-# Normal force diagram
-# ============================================================
-
-st.header("Диаграма на нормалната сила N(θ)")
-
-fig_N = go.Figure()
-
-fig_N.add_trace(go.Scatter(
-    x=theta_deg,
-    y=N,
-    mode="lines+markers",
-    name="N(θ) [kN]"
-))
-
-fig_N.add_hline(
-    y=0,
-    line_dash="dash"
-)
-
-fig_N.update_layout(
-    title="Нормална сила N(θ)",
-    xaxis_title="θ [градуси]",
-    yaxis_title="N(θ) [kN]",
-    height=450
-)
-
-st.plotly_chart(fig_N, use_container_width=True)
-
-
-# ============================================================
-# Eccentricity plot
-# ============================================================
-
-st.header("Ексцентрицитет и проверка на ядрото")
-
-fig_e = go.Figure()
-
-fig_e.add_trace(go.Scatter(
-    x=theta_deg,
-    y=e,
-    mode="lines+markers",
-    name="e(θ) = M(θ) / N(θ)"
-))
-
-fig_e.add_trace(go.Scatter(
-    x=theta_deg,
-    y=np.full_like(theta, kernel_plus),
+fig_e_polar.add_trace(go.Scatter(
+    x=x_h6_plus,
+    y=y_h6_plus,
     mode="lines",
-    name="+h/6"
+    name="+h/6 към интрадоса",
+    line=dict(color="green", width=2)
 ))
 
-fig_e.add_trace(go.Scatter(
-    x=theta_deg,
-    y=np.full_like(theta, kernel_minus),
+fig_e_polar.add_trace(go.Scatter(
+    x=x_h6_minus,
+    y=y_h6_minus,
     mode="lines",
-    name="-h/6"
+    name="-h/6 към екстрадоса",
+    line=dict(color="green", width=2, dash="dash")
 ))
 
-fig_e.add_hline(
-    y=0,
-    line_dash="dash"
+fig_e_polar.add_trace(go.Scatter(
+    x=x_h3_plus,
+    y=y_h3_plus,
+    mode="lines",
+    name="+h/3 към интрадоса",
+    line=dict(color="orange", width=2)
+))
+
+fig_e_polar.add_trace(go.Scatter(
+    x=x_h3_minus,
+    y=y_h3_minus,
+    mode="lines",
+    name="-h/3 към екстрадоса",
+    line=dict(color="orange", width=2, dash="dash")
+))
+
+fig_e_polar.update_layout(
+    title="e(θ): положителен ексцентрицитет към интрадоса",
+    xaxis_title="x [m]",
+    yaxis_title="y [m]",
+    height=700,
+    yaxis_scaleanchor="x",
+    legend=dict(orientation="h", y=-0.22)
 )
 
-fig_e.update_layout(
-    title="Проверка: |e| ≤ h/6",
-    xaxis_title="θ [градуси]",
-    yaxis_title="e [m]",
-    height=500
+fig_e_polar.update_xaxes(
+    range=[-R_extrados - 0.25 * R, R_extrados + 0.25 * R],
+    zeroline=False
 )
 
-st.plotly_chart(fig_e, use_container_width=True)
+fig_e_polar.update_yaxes(
+    range=[-0.20 * R, R_extrados + 0.35 * R],
+    zeroline=False
+)
 
+st.plotly_chart(fig_e_polar, use_container_width=True)
 
+if np.any(np.abs(e) > h / 2):
+    st.warning(
+        "Част от стойностите на e(θ) са извън дебелината на арката. "
+        "В диаграмата са скрити точките извън сечението, за да остане чертежът четим."
+    )
 # ============================================================
 # Engineering conclusion
 # ============================================================
@@ -621,33 +811,6 @@ if np.any(critical_intrados):
 
 if np.any(critical_extrados):
     st.write("Препоръка: проверка/укрепване в зона към екстрадоса.")
-
-
-# ============================================================
-# Tables
-# ============================================================
-
-st.header("Критични сечения")
-
-critical_df = df[df["Проверка"] != "В ядрото"]
-
-if critical_df.empty:
-    st.success("Няма критични сечения според проверката |e| ≤ h/6.")
-else:
-    st.dataframe(critical_df, use_container_width=True)
-
-st.header("Пълна таблица с резултати")
-
-st.dataframe(df, use_container_width=True)
-
-csv = df.to_csv(index=False).encode("utf-8-sig")
-
-st.download_button(
-    label="Изтегли резултатите като CSV",
-    data=csv,
-    file_name="arch_results.csv",
-    mime="text/csv"
-)
 
 
 # ============================================================
