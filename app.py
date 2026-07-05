@@ -112,6 +112,10 @@ s = R * theta
 # Structural formulas
 # ============================================================
 
+# ============================================================
+# Structural formulas
+# ============================================================
+
 V_A = (q * np.pi * R) / 2
 V_B = V_A
 
@@ -121,17 +125,25 @@ H_B = H_A
 M_A = -q * R**2 * (1 - 2 / np.pi)
 M_B = M_A
 
+# The formulas are valid from 0° to 90°.
+# For the right half of the arch, mirror the angle:
+# theta_calc = 0° at left support
+# theta_calc = 90° at crown
+# theta_calc = 0° at right support
+theta_calc = np.minimum(theta, np.pi - theta)
+theta_calc = np.minimum(theta, np.pi - theta)
+
 M = q * R**2 * (
     2 / np.pi
-    - np.cos(theta)
-    - theta * np.sin(theta)
-    + (1 / np.pi) * np.sin(theta)
+    - np.cos(theta_calc)
+    - theta_calc * np.sin(theta_calc)
+    + (1 / np.pi) * np.sin(theta_calc)
 )
 
 N = -q * R * (
-    np.cos(theta)
-    + theta * np.sin(theta)
-    + (1 / np.pi) * np.sin(theta)
+    np.cos(theta_calc)
+    + theta_calc * np.sin(theta_calc)
+    + (1 / np.pi) * np.sin(theta_calc)
 )
 
 e = np.divide(
@@ -147,7 +159,6 @@ kernel_minus = -h / 6
 inside_kernel = np.abs(e) <= kernel_plus
 critical_intrados = e > kernel_plus
 critical_extrados = e < kernel_minus
-
 
 # ============================================================
 # Helper functions
@@ -794,16 +805,18 @@ st.latex(r"V_A = V_B = \frac{q \pi R}{2}")
 st.latex(r"H_A = H_B = \frac{qR}{\pi}")
 st.latex(r"M_A = M_B = -qR^2 \left(1 - \frac{2}{\pi}\right)")
 
+st.latex(r"\theta^* = \min(\theta, \pi - \theta)")
+
 st.latex(
     r"M(\theta) = qR^2 \left("
-    r"\frac{2}{\pi} - \cos\theta - \theta\sin\theta + "
-    r"\frac{1}{\pi}\sin\theta"
+    r"\frac{2}{\pi} - \cos\theta^* - \theta^*\sin\theta^* + "
+    r"\frac{1}{\pi}\sin\theta^*"
     r"\right)"
 )
 
 st.latex(
     r"N(\theta) = -qR \left("
-    r"\cos\theta + \theta\sin\theta + \frac{1}{\pi}\sin\theta"
+    r"\cos\theta^* + \theta^*\sin\theta^* + \frac{1}{\pi}\sin\theta^*"
     r"\right)"
 )
 
