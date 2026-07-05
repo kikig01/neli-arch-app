@@ -4,6 +4,10 @@ import pandas as pd
 import plotly.graph_objects as go
 
 
+# ============================================================
+# Page setup
+# ============================================================
+
 st.set_page_config(
     page_title="Анализ на полукръгла арка",
     layout="wide"
@@ -30,7 +34,6 @@ R = st.sidebar.number_input(
 )
 
 L = 2 * R
-
 st.sidebar.write(f"Отвор L = 2R = {L:.2f} m")
 
 h = st.sidebar.number_input(
@@ -79,10 +82,6 @@ st.sidebar.info(
 # ============================================================
 # Geometry
 # ============================================================
-
-#R = L / 2
-# R is now given directly as input.
-# For a semicircular arch, L = 2R.
 
 if h >= 2 * R:
     st.error("Дебелината h е твърде голяма спрямо радиуса R.")
@@ -151,30 +150,73 @@ critical_extrados = e < kernel_minus
 
 
 # ============================================================
-# Pressure line for visualisation
+# Helper functions
 # ============================================================
 
-# Radial direction
-radial_x = -np.cos(theta)
-radial_y = np.sin(theta)
+def arc_xy(radius_values, theta_values):
+    """
+    Converts polar semicircle coordinates to Cartesian coordinates.
+    theta = 0° left support, 90° crown, 180° right support.
+    """
+    x = -radius_values * np.cos(theta_values)
+    y = radius_values * np.sin(theta_values)
+    return x, y
 
-# Real pressure line
-x_pressure_real = x_axis + e * radial_x
-y_pressure_real = y_axis + e * radial_y
 
-# For the geometry plot only:
-# If the pressure line is very far outside the arch, hide those points
-# so the arch does not become tiny.
-max_visual_offset = h / 2
-e_visual = e.copy()
-e_visual[np.abs(e_visual) > max_visual_offset] = np.nan
+def add_arch_reference_lines(fig, R_value, h_value, theta_values):
+    """
+    Adds intrados, extrados, and zero/axis line as background references.
+    """
+    r_axis = np.full_like(theta_values, R_value)
+    r_intrados = np.full_like(theta_values, R_value - h_value / 2)
+    r_extrados = np.full_like(theta_values, R_value + h_value / 2)
 
-x_pressure_visual = x_axis + e_visual * radial_x
-y_pressure_visual = y_axis + e_visual * radial_y
+    x_axis_ref, y_axis_ref = arc_xy(r_axis, theta_values)
+    x_intrados_ref, y_intrados_ref = arc_xy(r_intrados, theta_values)
+    x_extrados_ref, y_extrados_ref = arc_xy(r_extrados, theta_values)
+
+    fig.add_trace(go.Scatter(
+        x=x_extrados_ref,
+        y=y_extrados_ref,
+        mode="lines",
+        name="Екстрадос",
+        line=dict(color="gray", width=2, dash="dot")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x_intrados_ref,
+        y=y_intrados_ref,
+        mode="lines",
+        name="Интрадос",
+        line=dict(color="gray", width=2, dash="dot")
+    ))
+
+    fig.add_trace(go.Scatter(
+        x=x_axis_ref,
+        y=y_axis_ref,
+        mode="lines",
+        name="Нулева линия / ос на арката",
+        line=dict(color="red", width=2)
+    ))
 
 
 # ============================================================
-# Table
+# Pressure line for geometry plot
+# ============================================================
+
+# Convention:
+# positive e goes towards intrados => smaller radius
+# negative e goes towards extrados => larger radius
+
+e_visual_geom = e.copy()
+e_visual_geom[np.abs(e_visual_geom) > h / 2] = np.nan
+
+r_pressure_visual = R - e_visual_geom
+x_pressure_visual, y_pressure_visual = arc_xy(r_pressure_visual, theta)
+
+
+# ============================================================
+# Result data
 # ============================================================
 
 status = np.where(
@@ -298,9 +340,9 @@ if show_pressure_line:
         x=x_pressure_visual,
         y=y_pressure_visual,
         mode="lines+markers",
-        line=dict(width=3),
+        line=dict(width=3, color="black"),
         marker=dict(size=5),
-        name="Линия на натиска в сечението"
+        name="Линия на натиска"
     ))
 
 # Span arrow: from one end of the intrados to the other end of the intrados
@@ -468,205 +510,130 @@ fig_geom.update_layout(
 
 st.plotly_chart(fig_geom, use_container_width=True)
 
-
-# ============================================================
-# Warning if pressure line is outside
-# ============================================================
-
 if show_pressure_line and np.any(np.abs(e) > h / 2):
     st.warning(
         "Част от реалната линия на натиска е извън дебелината на арката. "
         "В геометричната схема са показани само точките, които попадат в дебелината, "
-        "за да не се деформира мащабът на чертежа. Пълните стойности са в таблицата."
+        "за да не се деформира мащабът на чертежа."
     )
 
-# ============================================================
-# Helper function for semicircle polar-style diagrams
-# ============================================================
-
-def semicircle_trace(theta, r, name, hover_values=None):
-    """
-    Draws a polar-style semicircle in Cartesian coordinates.
-    theta is in radians, r is the radial value.
-    """
-    x = r * np.cos(theta)
-    y = r * np.sin(theta)
-
-    if hover_values is None:
-        hover_values = r
-
-    return go.Scatter(
-        x=x,
-        y=y,
-        mode="lines+markers",
-        name=name,
-        text=[
-            f"θ = {td:.1f}°<br>value = {val:.4f}"
-            for td, val in zip(theta_deg, hover_values)
-        ],
-        hovertemplate="%{text}<extra></extra>"
-    )
 
 # ============================================================
-# Helper functions for engineering-style polar semicircle diagrams
-# ============================================================
-
-def arc_xy(radius_values, theta):
-    """
-    Converts polar semicircle coordinates to Cartesian coordinates.
-    theta = 0° left support, 90° crown, 180° right support.
-    """
-    x = -radius_values * np.cos(theta)
-    y = radius_values * np.sin(theta)
-    return x, y
-
-
-def add_arch_reference_lines(fig, R, h, theta):
-    """
-    Adds intrados, extrados, and zero/axis line as background references.
-    """
-    r_axis = np.full_like(theta, R)
-    r_intrados = np.full_like(theta, R - h / 2)
-    r_extrados = np.full_like(theta, R + h / 2)
-
-    x_axis_ref, y_axis_ref = arc_xy(r_axis, theta)
-    x_intrados_ref, y_intrados_ref = arc_xy(r_intrados, theta)
-    x_extrados_ref, y_extrados_ref = arc_xy(r_extrados, theta)
-
-    fig.add_trace(go.Scatter(
-        x=x_extrados_ref,
-        y=y_extrados_ref,
-        mode="lines",
-        name="Екстрадос",
-        line=dict(color="gray", width=2, dash="dot")
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=x_intrados_ref,
-        y=y_intrados_ref,
-        mode="lines",
-        name="Интрадос",
-        line=dict(color="gray", width=2, dash="dot")
-    ))
-
-    fig.add_trace(go.Scatter(
-        x=x_axis_ref,
-        y=y_axis_ref,
-        mode="lines",
-        name="Нулева линия / ос на арката",
-        line=dict(color="red", width=2)
-    ))
-
-
-# ============================================================
-# Helper for separate scaled polar diagrams
-# ============================================================
-
-def scaled_polar_semicircle(theta, values, theta_deg, name, unit, line_color):
-    """
-    Creates a separate engineering-style semicircular polar diagram.
-    The radius is scaled from the absolute value.
-    The real signed value is kept in hover text.
-    """
-
-    values_abs = np.abs(values)
-    max_value = np.nanmax(values_abs)
-
-    if max_value > 0:
-        r = values_abs / max_value
-    else:
-        r = np.zeros_like(values_abs)
-
-    # Semicircle coordinates:
-    # theta = 0° left, theta = 90° top, theta = 180° right
-    x = -r * np.cos(theta)
-    y = r * np.sin(theta)
-
-    fig = go.Figure()
-
-    # Reference semicircles: 25%, 50%, 75%, 100%
-    for rr, label in zip([0.25, 0.50, 0.75, 1.00], ["25%", "50%", "75%", "100%"]):
-        x_ref = -rr * np.cos(theta)
-        y_ref = rr * np.sin(theta)
-
-        fig.add_trace(go.Scatter(
-            x=x_ref,
-            y=y_ref,
-            mode="lines",
-            name=label,
-            line=dict(color="lightgray", width=1, dash="dot"),
-            hoverinfo="skip"
-        ))
-
-    # Actual scaled diagram
-    fig.add_trace(go.Scatter(
-        x=x,
-        y=y,
-        mode="lines+markers",
-        name=name,
-        line=dict(color=line_color, width=3),
-        marker=dict(size=6),
-        text=[
-            f"θ = {td:.1f}°<br>{name} = {v:.4f} {unit}<br>|{name}| / max = {rv:.3f}"
-            for td, v, rv in zip(theta_deg, values, r)
-        ],
-        hovertemplate="%{text}<extra></extra>"
-    ))
-
-    fig.update_layout(
-        title=f"{name} като отделна мащабирана полярна полудиаграма",
-        xaxis_title="мащабиран x",
-        yaxis_title="мащабиран y",
-        height=600,
-        yaxis_scaleanchor="x",
-        legend=dict(orientation="h", y=-0.15)
-    )
-
-    fig.update_xaxes(
-        range=[-1.15, 1.15],
-        zeroline=True
-    )
-
-    fig.update_yaxes(
-        range=[-0.10, 1.15],
-        zeroline=True
-    )
-
-    return fig
-
-# ============================================================
-# N(theta) separate scaled polar diagram
+# N(theta) polar semicircle diagram
 # ============================================================
 
 st.header("Полярна полудиаграма на нормалната сила N(θ)")
 
-fig_N_scaled = scaled_polar_semicircle(
-    theta=theta,
-    values=N,
-    theta_deg=theta_deg,
+# In the formulas, N is mostly negative because of the sign convention.
+# For the diagram, compression is shown as positive inward.
+N_compression = -N
+
+max_abs_N = np.nanmax(np.abs(N_compression))
+
+if max_abs_N > 0:
+    N_offset = (N_compression / max_abs_N) * (0.45 * h)
+else:
+    N_offset = np.zeros_like(N_compression)
+
+# Positive compression goes towards intrados, therefore smaller radius
+r_N = R - N_offset
+x_N, y_N = arc_xy(r_N, theta)
+
+fig_N_polar = go.Figure()
+add_arch_reference_lines(fig_N_polar, R, h, theta)
+
+fig_N_polar.add_trace(go.Scatter(
+    x=x_N,
+    y=y_N,
+    mode="lines+markers",
     name="N(θ)",
-    unit="kN",
-    line_color="blue"
+    line=dict(color="blue", width=3),
+    marker=dict(size=6),
+    text=[
+        f"θ = {td:.1f}°<br>N = {nv:.4f} kN"
+        for td, nv in zip(theta_deg, N)
+    ],
+    hovertemplate="%{text}<extra></extra>"
+))
+
+fig_N_polar.update_layout(
+    title="N(θ) като полярна полудиаграма",
+    xaxis_title="x [m]",
+    yaxis_title="y [m]",
+    height=650,
+    yaxis_scaleanchor="x",
+    legend=dict(orientation="h", y=-0.18)
 )
 
-st.plotly_chart(fig_N_scaled, use_container_width=True)
+fig_N_polar.update_xaxes(
+    range=[-R_extrados - 0.25 * R, R_extrados + 0.25 * R],
+    zeroline=False
+)
+
+fig_N_polar.update_yaxes(
+    range=[-0.20 * R, R_extrados + 0.35 * R],
+    zeroline=False
+)
+
+st.plotly_chart(fig_N_polar, use_container_width=True)
+
 
 # ============================================================
-# M(theta) separate scaled polar diagram
+# M(theta) polar semicircle diagram
 # ============================================================
 
 st.header("Полярна полудиаграма на огъващия момент M(θ)")
 
-fig_M_scaled = scaled_polar_semicircle(
-    theta=theta,
-    values=M,
-    theta_deg=theta_deg,
+max_abs_M = np.nanmax(np.abs(M))
+
+if max_abs_M > 0:
+    M_offset = (M / max_abs_M) * (0.45 * h)
+else:
+    M_offset = np.zeros_like(M)
+
+# Positive M goes towards intrados, i.e. smaller radius.
+# Negative M goes towards extrados, i.e. larger radius.
+r_M = R - M_offset
+x_M, y_M = arc_xy(r_M, theta)
+
+fig_M_polar = go.Figure()
+add_arch_reference_lines(fig_M_polar, R, h, theta)
+
+fig_M_polar.add_trace(go.Scatter(
+    x=x_M,
+    y=y_M,
+    mode="lines+markers",
     name="M(θ)",
-    unit="kNm",
-    line_color="purple"
+    line=dict(color="purple", width=3),
+    marker=dict(size=6),
+    text=[
+        f"θ = {td:.1f}°<br>M = {mv:.4f} kNm"
+        for td, mv in zip(theta_deg, M)
+    ],
+    hovertemplate="%{text}<extra></extra>"
+))
+
+fig_M_polar.update_layout(
+    title="M(θ): положителен момент към интрадоса",
+    xaxis_title="x [m]",
+    yaxis_title="y [m]",
+    height=650,
+    yaxis_scaleanchor="x",
+    legend=dict(orientation="h", y=-0.18)
 )
 
-st.plotly_chart(fig_M_scaled, use_container_width=True)
+fig_M_polar.update_xaxes(
+    range=[-R_extrados - 0.25 * R, R_extrados + 0.25 * R],
+    zeroline=False
+)
+
+fig_M_polar.update_yaxes(
+    range=[-0.20 * R, R_extrados + 0.35 * R],
+    zeroline=False
+)
+
+st.plotly_chart(fig_M_polar, use_container_width=True)
+
 
 # ============================================================
 # Eccentricity polar semicircle diagram
@@ -674,21 +641,23 @@ st.plotly_chart(fig_M_scaled, use_container_width=True)
 
 st.header("Полярна полудиаграма на ексцентрицитета e(θ)")
 
-# Positive e goes towards intrados => smaller radius.
-# Negative e goes towards extrados => larger radius.
+# Convention:
+# positive e goes towards intrados => smaller radius
+# negative e goes towards extrados => larger radius
+#
+# For visualisation only, hide points outside the arch thickness.
+# The engineering check still uses the full e values.
 
-# For visualisation only:
-# hide points that are far outside the section, so the plot stays readable.
 e_visual = e.copy()
 e_visual[np.abs(e_visual) > h / 2] = np.nan
 
 r_e = R - e_visual
 
-r_h6_plus = np.full_like(theta, R - h / 6)   # +h/6 towards intrados
-r_h6_minus = np.full_like(theta, R + h / 6)  # -h/6 towards extrados
+r_h6_plus = np.full_like(theta, R - h / 6)    # +h/6 towards intrados
+r_h6_minus = np.full_like(theta, R + h / 6)   # -h/6 towards extrados
 
-r_h3_plus = np.full_like(theta, R - h / 3)   # +h/3 towards intrados
-r_h3_minus = np.full_like(theta, R + h / 3)  # -h/3 towards extrados
+r_h3_plus = np.full_like(theta, R - h / 3)    # +h/3 towards intrados
+r_h3_minus = np.full_like(theta, R + h / 3)   # -h/3 towards extrados
 
 x_e, y_e = arc_xy(r_e, theta)
 
@@ -699,7 +668,6 @@ x_h3_plus, y_h3_plus = arc_xy(r_h3_plus, theta)
 x_h3_minus, y_h3_minus = arc_xy(r_h3_minus, theta)
 
 fig_e_polar = go.Figure()
-
 add_arch_reference_lines(fig_e_polar, R, h, theta)
 
 fig_e_polar.add_trace(go.Scatter(
@@ -774,6 +742,8 @@ if np.any(np.abs(e) > h / 2):
         "Част от стойностите на e(θ) са извън дебелината на арката. "
         "В диаграмата са скрити точките извън сечението, за да остане чертежът четим."
     )
+
+
 # ============================================================
 # Engineering conclusion
 # ============================================================
@@ -819,7 +789,6 @@ if np.any(critical_extrados):
 
 st.header("Използвани формули")
 
-#st.latex(r"R = \frac{L}{2}")
 st.latex(r"L = 2R")
 st.latex(r"V_A = V_B = \frac{q \pi R}{2}")
 st.latex(r"H_A = H_B = \frac{qR}{\pi}")
